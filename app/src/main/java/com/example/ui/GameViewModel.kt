@@ -29,7 +29,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 enum class ScreenState {
     MENU,
@@ -128,6 +131,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     )
     val unlockedSkinIds: StateFlow<Set<String>> = _unlockedSkinIds.asStateFlow()
 
+    // Dungeon Theme (Walls & Bricks & Background)
+    private val _selectedTheme = MutableStateFlow(
+        com.example.model.DungeonTheme.entries.find { it.id == prefs.getString("selected_theme", com.example.model.DungeonTheme.DEFAULT_CRYPT.id) }
+            ?: com.example.model.DungeonTheme.DEFAULT_CRYPT
+    )
+    val selectedTheme: StateFlow<com.example.model.DungeonTheme> = _selectedTheme.asStateFlow()
+
+    private val _unlockedThemeIds = MutableStateFlow(
+        prefs.getStringSet("unlocked_themes", setOf(com.example.model.DungeonTheme.DEFAULT_CRYPT.id))?.toSet()
+            ?: setOf(com.example.model.DungeonTheme.DEFAULT_CRYPT.id)
+    )
+    val unlockedThemeIds: StateFlow<Set<String>> = _unlockedThemeIds.asStateFlow()
+
     private val _adRewardToast = MutableStateFlow<String?>(null)
     val adRewardToast: StateFlow<String?> = _adRewardToast.asStateFlow()
 
@@ -179,8 +195,35 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun purchaseTheme(theme: com.example.model.DungeonTheme): Boolean {
+        if (_unlockedThemeIds.value.contains(theme.id)) {
+            equipTheme(theme)
+            return true
+        }
+        if (spendCoins(theme.costCoins)) {
+            val updatedThemes = _unlockedThemeIds.value + theme.id
+            _unlockedThemeIds.value = updatedThemes
+            _selectedTheme.value = theme
+            prefs.edit()
+                .putStringSet("unlocked_themes", updatedThemes)
+                .putString("selected_theme", theme.id)
+                .apply()
+            soundManager.playChestOpen()
+            return true
+        }
+        return false
+    }
+
+    fun equipTheme(theme: com.example.model.DungeonTheme) {
+        if (_unlockedThemeIds.value.contains(theme.id)) {
+            _selectedTheme.value = theme
+            prefs.edit().putString("selected_theme", theme.id).apply()
+            soundManager.playMenuClick()
+        }
+    }
+
     fun buyHintsWithCoins(): Boolean {
-        if (spendCoins(50)) {
+        if (spendCoins(10)) {
             val newHints = _freeHints.value + 3
             _freeHints.value = newHints
             prefs.edit().putInt("free_hints", newHints).apply()
@@ -191,9 +234,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun watchRewardedAdForCoins() {
-        // Simulated AdMob rewarded video
-        addCoins(75)
-        _adRewardToast.value = "Rewarded Ad Completed! +75 Gold Coins earned!"
+        // Rewarded video gives exactly 5 coins
+        addCoins(5)
+        _adRewardToast.value = "Rewarded Ad Completed! +5 Gold Coins earned!"
         soundManager.playChestOpen()
     }
 
@@ -210,6 +253,133 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putBoolean("ads_removed", true).apply()
         _adRewardToast.value = "Ads Removed Forever! Thank you for supporting the developer!"
         soundManager.playWinFanfare()
+    }
+
+    // ================= DAILY REWARDS (7-DAY LOGIN BONUS) =================
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private fun getTodayDateString(): String = dateFormat.format(Date())
+    private fun getYesterdayDateString(): String {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -1)
+        return dateFormat.format(cal.time)
+    }
+
+    private val _dailyStreak = MutableStateFlow(prefs.getInt("daily_streak", 1))
+    val dailyStreak: StateFlow<Int> = _dailyStreak.asStateFlow()
+
+    private val _isDailyRewardClaimable = MutableStateFlow(
+        prefs.getString("last_login_date", "") != getTodayDateString()
+    )
+    val isDailyRewardClaimable: StateFlow<Boolean> = _isDailyRewardClaimable.asStateFlow()
+
+    fun claimDailyReward(): Pair<Int, Int> {
+        val today = getTodayDateString()
+        val yesterday = getYesterdayDateString()
+        val lastDate = prefs.getString("last_login_date", "") ?: ""
+
+        val currentStreak = when {
+            lastDate == yesterday -> {
+                val next = (_dailyStreak.value % 7) + 1
+                next
+            }
+            lastDate == today -> _dailyStreak.value
+            else -> 1 // missed days or brand new
+        }
+
+        // Rewards for Day 1..7 (balanced: 1-5 coins)
+        val (rewardCoins, rewardHints) = when (currentStreak) {
+            1 -> 1 to 0
+            2 -> 2 to 0
+            3 -> 0 to 1
+            4 -> 3 to 0
+            5 -> 0 to 2
+            6 -> 4 to 0
+            7 -> 5 to 2 // Grand Vault Reward
+            else -> 1 to 0
+        }
+
+        if (rewardCoins > 0) addCoins(rewardCoins)
+        if (rewardHints > 0) {
+            val newHints = _freeHints.value + rewardHints
+            _freeHints.value = newHints
+            prefs.edit().putInt("free_hints", newHints).apply()
+        }
+
+        _dailyStreak.value = currentStreak
+        _isDailyRewardClaimable.value = false
+        prefs.edit()
+            .putString("last_login_date", today)
+            .putInt("daily_streak", currentStreak)
+            .apply()
+
+        soundManager.playChestOpen()
+        triggerVibration(60)
+        return rewardCoins to rewardHints
+    }
+
+    // ================= LUCKY FORTUNE SPIN WHEEL =================
+    private val _isFreeSpinAvailable = MutableStateFlow(
+        prefs.getString("last_free_spin_date", "") != getTodayDateString()
+    )
+    val isFreeSpinAvailable: StateFlow<Boolean> = _isFreeSpinAvailable.asStateFlow()
+
+    // Sectors: 0: +1🪙, 1: +2🪙, 2: +1💡, 3: +3🪙, 4: +5🪙, 5: +2💡
+    fun spinWheel(
+        isRewardedAd: Boolean,
+        onSpinResult: (sectorIndex: Int, coins: Int, hints: Int, desc: String) -> Unit
+    ) {
+        val sector = (0..5).random()
+        val (coins, hints, desc) = when (sector) {
+            0 -> Triple(1, 0, "+1 Gold Coin")
+            1 -> Triple(2, 0, "+2 Gold Coins")
+            2 -> Triple(0, 1, "+1 Free Hint")
+            3 -> Triple(3, 0, "+3 Gold Coins")
+            4 -> Triple(5, 0, "+5 JackPot Coins!")
+            5 -> Triple(0, 2, "+2 Free Hints")
+            else -> Triple(1, 0, "+1 Gold Coin")
+        }
+
+        if (coins > 0) addCoins(coins)
+        if (hints > 0) {
+            val newHints = _freeHints.value + hints
+            _freeHints.value = newHints
+            prefs.edit().putInt("free_hints", newHints).apply()
+        }
+
+        if (!isRewardedAd) {
+            val today = getTodayDateString()
+            prefs.edit().putString("last_free_spin_date", today).apply()
+            _isFreeSpinAvailable.value = false
+        }
+
+        soundManager.playChestOpen()
+        triggerVibration(70)
+        onSpinResult(sector, coins, hints, desc)
+    }
+
+    // ================= ACHIEVEMENTS =================
+    private val _claimedAchievementIds = MutableStateFlow(
+        prefs.getStringSet("claimed_achievements", emptySet())?.toSet() ?: emptySet()
+    )
+    val claimedAchievementIds: StateFlow<Set<String>> = _claimedAchievementIds.asStateFlow()
+
+    fun claimAchievement(id: String, rewardCoins: Int, rewardHints: Int): Boolean {
+        if (_claimedAchievementIds.value.contains(id)) return false
+
+        val updated = _claimedAchievementIds.value + id
+        _claimedAchievementIds.value = updated
+        prefs.edit().putStringSet("claimed_achievements", updated).apply()
+
+        if (rewardCoins > 0) addCoins(rewardCoins)
+        if (rewardHints > 0) {
+            val newHints = _freeHints.value + rewardHints
+            _freeHints.value = newHints
+            prefs.edit().putInt("free_hints", newHints).apply()
+        }
+
+        soundManager.playWinFanfare()
+        triggerVibration(80)
+        return true
     }
 
     // Room DB Observables
@@ -331,12 +501,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             is MoveResult.Won -> {
                 soundManager.playWinFanfare()
                 triggerVibration(80)
-                // Award coins based on performance
+                // Award coins based on performance (1 to 5 coins max per level)
                 val stars = nextState.calculateStars()
                 val coinsEarned = when (stars) {
-                    3 -> 50
-                    2 -> 35
-                    else -> 20
+                    3 -> 5
+                    2 -> 3
+                    else -> 1
                 }
                 addCoins(coinsEarned)
 
@@ -348,10 +518,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         stars = stars,
                         moves = nextState.stepCount
                     )
-                    // If relic was collected, unlock it in DB and give bonus coins
+                    // If relic was collected, unlock it in DB
                     nextState.relicAwarded?.let { relic ->
                         repository.unlockRelic(relic.id, relic.name)
-                        addCoins(100)
                     }
                 }
             }

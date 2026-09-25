@@ -217,10 +217,12 @@ fun LevelSelectScreen(
             // Level Grid (2 columns)
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(bottom = 16.dp),
+                contentPadding = PaddingValues(bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
             ) {
                 itemsIndexed(levels) { index, level ->
                     val progress = progressList.find { it.levelId == level.id }
@@ -306,6 +308,15 @@ fun LevelSelectScreen(
                     }
                 }
             }
+
+            // Banner Ad at bottom of Level Select
+            Spacer(modifier = Modifier.height(4.dp))
+            com.example.ads.AdMobBanner(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }

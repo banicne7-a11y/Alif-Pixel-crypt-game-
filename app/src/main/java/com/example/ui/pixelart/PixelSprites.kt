@@ -13,12 +13,16 @@ import com.example.model.TileType
 
 object PixelSprites {
 
-    fun drawWall(scope: DrawScope, x: Float, y: Float, tileSize: Float) {
-        val darkStone = Color(0xFF1B1D2A)
-        val midStone = Color(0xFF2E3248)
-        val lightStone = Color(0xFF454B6B)
-        val highlight = Color(0xFF656D94)
-
+    fun drawWall(
+        scope: DrawScope,
+        x: Float,
+        y: Float,
+        tileSize: Float,
+        darkStone: Color = Color(0xFF1B1D2A),
+        midStone: Color = Color(0xFF2E3248),
+        lightStone: Color = Color(0xFF454B6B),
+        highlight: Color = Color(0xFF656D94)
+    ) {
         scope.drawRect(midStone, Offset(x, y), Size(tileSize, tileSize))
 
         // Mortar lines & bricks
@@ -39,10 +43,15 @@ object PixelSprites {
         scope.drawRect(darkStone, Offset(x, y), Size(tileSize, tileSize), style = Stroke(width = p * 0.5f))
     }
 
-    fun drawFloor(scope: DrawScope, x: Float, y: Float, tileSize: Float) {
-        val floorBg = Color(0xFF141724)
-        val tileAccent = Color(0xFF1C2033)
-        val crack = Color(0xFF0F111A)
+    fun drawFloor(
+        scope: DrawScope,
+        x: Float,
+        y: Float,
+        tileSize: Float,
+        floorBg: Color = Color(0xFF141724),
+        tileAccent: Color = Color(0xFF1C2033)
+    ) {
+        val crack = floorBg.copy(alpha = 0.5f)
 
         scope.drawRect(floorBg, Offset(x, y), Size(tileSize, tileSize))
 

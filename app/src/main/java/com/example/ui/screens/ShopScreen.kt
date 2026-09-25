@@ -84,9 +84,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.model.DungeonTheme
 import com.example.model.HeroSkin
+import com.example.ui.components.DailyRewardDialog
+import com.example.ui.components.LuckySpinDialog
 import com.example.ui.GameViewModel
 import com.example.ui.ScreenState
+import com.example.ui.pixelart.PixelSprites
 import com.example.ui.theme.DungeonBorder
 import com.example.ui.theme.DungeonCard
 import com.example.ui.theme.DungeonDarkBg
@@ -102,9 +106,9 @@ import com.example.ui.theme.RetroTextSecondary
 
 enum class ShopTab(val title: String, val icon: String) {
     ARMORY("ARMORY", "🛡️"),
+    BRICKS("BRICKS", "🧱"),
     SUPPLIES("SUPPLIES", "💡"),
-    ADS_REWARDS("REWARDS", "🎁"),
-    VIP_PASS("VIP", "👑")
+    ADS_REWARDS("REWARDS", "🎁")
 }
 
 @Composable
@@ -114,14 +118,21 @@ fun ShopScreen(
 ) {
     val coins by viewModel.goldCoins.collectAsStateWithLifecycle()
     val hints by viewModel.freeHints.collectAsStateWithLifecycle()
-    val adsRemoved by viewModel.adsRemoved.collectAsStateWithLifecycle()
     val selectedSkin by viewModel.selectedSkin.collectAsStateWithLifecycle()
     val unlockedSkins by viewModel.unlockedSkinIds.collectAsStateWithLifecycle()
+    val selectedTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
+    val unlockedThemes by viewModel.unlockedThemeIds.collectAsStateWithLifecycle()
     val adToast by viewModel.adRewardToast.collectAsStateWithLifecycle()
+    val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
+    val isDailyRewardClaimable by viewModel.isDailyRewardClaimable.collectAsStateWithLifecycle()
+    val isFreeSpinAvailable by viewModel.isFreeSpinAvailable.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var inspectSkin by remember { mutableStateOf<HeroSkin?>(null) }
+    var inspectTheme by remember { mutableStateOf<DungeonTheme?>(null) }
+    var showDailyRewardDialog by remember { mutableStateOf(false) }
+    var showLuckySpinDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(adToast) {
@@ -190,7 +201,7 @@ fun ShopScreen(
                             }
                         }
                         Text(
-                            text = "OFFICIAL TREASURY & HERO ARMORY",
+                            text = "ARMORY • BRICKS • SUPPLIES",
                             color = PixelCyan,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -280,12 +291,12 @@ fun ShopScreen(
                             ) {
                                 Text(
                                     text = tab.icon,
-                                    fontSize = 12.sp
+                                    fontSize = 11.sp
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = tab.title,
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace,
                                     color = if (isSelected) PixelGold else RetroTextSecondary
@@ -314,6 +325,14 @@ fun ShopScreen(
                         onEquipSkin = { skin -> viewModel.equipSkin(skin) },
                         onBuySkin = { skin -> viewModel.purchaseSkin(skin) }
                     )
+                    ShopTab.BRICKS -> BricksTabContent(
+                        selectedTheme = selectedTheme,
+                        unlockedThemes = unlockedThemes,
+                        coins = coins,
+                        onSelectTheme = { theme -> inspectTheme = theme },
+                        onEquipTheme = { theme -> viewModel.equipTheme(theme) },
+                        onBuyTheme = { theme -> viewModel.purchaseTheme(theme) }
+                    )
                     ShopTab.SUPPLIES -> SuppliesTabContent(
                         coins = coins,
                         hints = hints,
@@ -327,6 +346,10 @@ fun ShopScreen(
                         }
                     )
                     ShopTab.ADS_REWARDS -> AdsAndRewardsTabContent(
+                        isDailyClaimable = isDailyRewardClaimable,
+                        isFreeSpinAvailable = isFreeSpinAvailable,
+                        onOpenDailyGift = { showDailyRewardDialog = true },
+                        onOpenLuckySpin = { showLuckySpinDialog = true },
                         onWatchAdForCoins = {
                             com.example.ads.AdMobManager.showRewardedAd(
                                 context = context,
@@ -342,23 +365,17 @@ fun ShopScreen(
                             )
                         }
                     )
-                    ShopTab.VIP_PASS -> VipPassTabContent(
-                        adsRemoved = adsRemoved,
-                        onBuyNoAds = { viewModel.purchaseRemoveAds() }
-                    )
                 }
             }
 
-            // Banner Ad at bottom of ShopScreen (if not VIP removed)
-            if (!adsRemoved) {
-                Spacer(modifier = Modifier.height(4.dp))
-                com.example.ads.AdMobBanner(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
+            // Banner Ad at bottom of ShopScreen (Always running)
+            Spacer(modifier = Modifier.height(4.dp))
+            com.example.ads.AdMobBanner(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
         }
 
         // ================= HERO SKIN INSPECT MODAL =================
@@ -478,16 +495,197 @@ fun ShopScreen(
             }
         }
 
+        // ================= BRICKS / THEME INSPECT MODAL =================
+        inspectTheme?.let { theme ->
+            val isOwned = unlockedThemes.contains(theme.id)
+            val isEquipped = selectedTheme.id == theme.id
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.75f))
+                    .clickable { inspectTheme = null },
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .clickable(enabled = false) {},
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = DungeonCard),
+                    border = BorderStroke(2.dp, Color(theme.wallHighlightHex))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Big Brick & Floor Sample Preview
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(2.dp, Color(theme.wallHighlightHex), RoundedCornerShape(12.dp))
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val s = size.width / 2f
+                                // Top-Left: Wall
+                                PixelSprites.drawWall(
+                                    scope = this,
+                                    x = 0f,
+                                    y = 0f,
+                                    tileSize = s,
+                                    darkStone = Color(theme.wallDarkColorHex),
+                                    midStone = Color(theme.wallMidColorHex),
+                                    lightStone = Color(theme.wallLightColorHex),
+                                    highlight = Color(theme.wallHighlightHex)
+                                )
+                                // Top-Right: Floor
+                                PixelSprites.drawFloor(
+                                    scope = this,
+                                    x = s,
+                                    y = 0f,
+                                    tileSize = s,
+                                    floorBg = Color(theme.floorBgColorHex),
+                                    tileAccent = Color(theme.floorAccentColorHex)
+                                )
+                                // Bottom-Left: Floor
+                                PixelSprites.drawFloor(
+                                    scope = this,
+                                    x = 0f,
+                                    y = s,
+                                    tileSize = s,
+                                    floorBg = Color(theme.floorBgColorHex),
+                                    tileAccent = Color(theme.floorAccentColorHex)
+                                )
+                                // Bottom-Right: Wall
+                                PixelSprites.drawWall(
+                                    scope = this,
+                                    x = s,
+                                    y = s,
+                                    tileSize = s,
+                                    darkStone = Color(theme.wallDarkColorHex),
+                                    midStone = Color(theme.wallMidColorHex),
+                                    lightStone = Color(theme.wallLightColorHex),
+                                    highlight = Color(theme.wallHighlightHex)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = theme.displayName.uppercase(),
+                            color = Color(theme.wallHighlightHex),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = theme.title,
+                            color = PixelCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = theme.lore,
+                            color = RetroTextPrimary,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 18.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { inspectTheme = null },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, DungeonBorder),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("CLOSE", color = RetroTextSecondary, fontFamily = FontFamily.Monospace)
+                            }
+
+                            if (isEquipped) {
+                                Button(
+                                    onClick = { inspectTheme = null },
+                                    enabled = false,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PixelEmerald),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("EQUIPPED ✓", fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                }
+                            } else if (isOwned) {
+                                Button(
+                                    onClick = {
+                                        viewModel.equipTheme(theme)
+                                        inspectTheme = null
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PixelGold, contentColor = Color(0xFF1E1400)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("EQUIP NOW", fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        viewModel.purchaseTheme(theme)
+                                        inspectTheme = null
+                                    },
+                                    enabled = coins >= theme.costCoins,
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = PixelGold, contentColor = Color(0xFF1E1400)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("BUY ${theme.costCoins} 🪙", fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
         )
+
+        if (showDailyRewardDialog) {
+            DailyRewardDialog(
+                currentStreak = dailyStreak,
+                isClaimable = isDailyRewardClaimable,
+                onClaim = { viewModel.claimDailyReward() },
+                onDismiss = { showDailyRewardDialog = false }
+            )
+        }
+
+        if (showLuckySpinDialog) {
+            LuckySpinDialog(
+                isFreeSpinAvailable = isFreeSpinAvailable,
+                onSpin = { isRewarded, onResult ->
+                    viewModel.spinWheel(isRewarded) { idx, c, h, desc ->
+                        onResult(idx, c, h, desc)
+                    }
+                },
+                onDismiss = { showLuckySpinDialog = false }
+            )
+        }
     }
 }
 
-// ================= TAB 1: ARMORY (HERO SKINS) =================
+// ================= TAB 1: ARMORY (HERO SKINS - 3x2 BOX GRID) =================
 @Composable
 private fun ArmoryTabContent(
     selectedSkin: HeroSkin,
@@ -790,7 +988,381 @@ private fun ArmoryTabContent(
     }
 }
 
-// ================= TAB 2: SUPPLIES (HINTS & PACKAGES) =================
+// ================= TAB 2: BRICKS & BACKGROUNDS (3x2 BOX GRID) =================
+@Composable
+private fun BricksTabContent(
+    selectedTheme: DungeonTheme,
+    unlockedThemes: Set<String>,
+    coins: Int,
+    onSelectTheme: (DungeonTheme) -> Unit,
+    onEquipTheme: (DungeonTheme) -> Unit,
+    onBuyTheme: (DungeonTheme) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Banner Current Theme Preview
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(selectedTheme.boardBgColorHex)
+            ),
+            border = BorderStroke(1.5.dp, Color(selectedTheme.wallHighlightHex))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Live sample tile
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.5.dp, Color(selectedTheme.wallHighlightHex), RoundedCornerShape(8.dp))
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val s = size.width / 2f
+                        PixelSprites.drawWall(
+                            scope = this,
+                            x = 0f,
+                            y = 0f,
+                            tileSize = s,
+                            darkStone = Color(selectedTheme.wallDarkColorHex),
+                            midStone = Color(selectedTheme.wallMidColorHex),
+                            lightStone = Color(selectedTheme.wallLightColorHex),
+                            highlight = Color(selectedTheme.wallHighlightHex)
+                        )
+                        PixelSprites.drawFloor(
+                            scope = this,
+                            x = s,
+                            y = 0f,
+                            tileSize = s,
+                            floorBg = Color(selectedTheme.floorBgColorHex),
+                            tileAccent = Color(selectedTheme.floorAccentColorHex)
+                        )
+                        PixelSprites.drawFloor(
+                            scope = this,
+                            x = 0f,
+                            y = s,
+                            tileSize = s,
+                            floorBg = Color(selectedTheme.floorBgColorHex),
+                            tileAccent = Color(selectedTheme.floorAccentColorHex)
+                        )
+                        PixelSprites.drawWall(
+                            scope = this,
+                            x = s,
+                            y = s,
+                            tileSize = s,
+                            darkStone = Color(selectedTheme.wallDarkColorHex),
+                            midStone = Color(selectedTheme.wallMidColorHex),
+                            lightStone = Color(selectedTheme.wallLightColorHex),
+                            highlight = Color(selectedTheme.wallHighlightHex)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "CURRENT DUNGEON BRICK",
+                            color = PixelEmerald,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = PixelEmerald,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Text(
+                        text = selectedTheme.displayName,
+                        color = Color(selectedTheme.wallHighlightHex),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = selectedTheme.title,
+                        color = RetroTextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "BRICKS & BACKGROUNDS (3x2 BOX GRID)",
+                color = PixelCyan,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.sp
+            )
+            Text(
+                text = "${unlockedThemes.size}/${DungeonTheme.entries.size} UNLOCKED",
+                color = PixelGold,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 3 items per row, 2 rows (6 total themes) in Box System
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            items(DungeonTheme.entries) { theme ->
+                val isOwned = unlockedThemes.contains(theme.id)
+                val isEquipped = selectedTheme.id == theme.id
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onSelectTheme(theme) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isEquipped) Color(0xFF1E2337) else DungeonCard
+                    ),
+                    border = BorderStroke(
+                        if (isEquipped) 2.dp else 1.dp,
+                        if (isEquipped) Color(theme.wallHighlightHex) else DungeonBorder
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Badge at top of Box
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isEquipped) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(PixelEmerald)
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "ACTIVE",
+                                        color = Color.Black,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Black,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            } else if (isOwned) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(PixelCyan.copy(alpha = 0.2f))
+                                        .border(0.5.dp, PixelCyan, RoundedCornerShape(3.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "OWNED",
+                                        color = PixelCyan,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = RetroTextSecondary,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = "${theme.costCoins}🪙",
+                                        color = PixelGold,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Mini Brick Canvas Swatch
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.5.dp, Color(theme.wallHighlightHex), RoundedCornerShape(8.dp))
+                        ) {
+                            Canvas(modifier = Modifier.fillMaxSize()) {
+                                val s = size.width / 2f
+                                PixelSprites.drawWall(
+                                    scope = this,
+                                    x = 0f,
+                                    y = 0f,
+                                    tileSize = s,
+                                    darkStone = Color(theme.wallDarkColorHex),
+                                    midStone = Color(theme.wallMidColorHex),
+                                    lightStone = Color(theme.wallLightColorHex),
+                                    highlight = Color(theme.wallHighlightHex)
+                                )
+                                PixelSprites.drawFloor(
+                                    scope = this,
+                                    x = s,
+                                    y = 0f,
+                                    tileSize = s,
+                                    floorBg = Color(theme.floorBgColorHex),
+                                    tileAccent = Color(theme.floorAccentColorHex)
+                                )
+                                PixelSprites.drawFloor(
+                                    scope = this,
+                                    x = 0f,
+                                    y = s,
+                                    tileSize = s,
+                                    floorBg = Color(theme.floorBgColorHex),
+                                    tileAccent = Color(theme.floorAccentColorHex)
+                                )
+                                PixelSprites.drawWall(
+                                    scope = this,
+                                    x = s,
+                                    y = s,
+                                    tileSize = s,
+                                    darkStone = Color(theme.wallDarkColorHex),
+                                    midStone = Color(theme.wallMidColorHex),
+                                    lightStone = Color(theme.wallLightColorHex),
+                                    highlight = Color(theme.wallHighlightHex)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = theme.displayName,
+                            color = Color(theme.wallHighlightHex),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Text(
+                            text = theme.title,
+                            color = RetroTextSecondary,
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Box Action Button
+                        if (isEquipped) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(PixelEmerald.copy(alpha = 0.2f))
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "USED",
+                                    color = PixelEmerald,
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        } else if (isOwned) {
+                            Button(
+                                onClick = { onEquipTheme(theme) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(28.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = DungeonSurface,
+                                    contentColor = PixelGold
+                                ),
+                                border = BorderStroke(1.dp, PixelGold),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    text = "EQUIP",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = { onBuyTheme(theme) },
+                                enabled = coins >= theme.costCoins,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(28.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = PixelGold,
+                                    contentColor = Color(0xFF1E1400)
+                                ),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    text = "${theme.costCoins}🪙",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ================= TAB 3: SUPPLIES (HINTS & PACKAGES) =================
 @Composable
 private fun SuppliesTabContent(
     coins: Int,
@@ -890,7 +1462,7 @@ private fun SuppliesTabContent(
 
                     Button(
                         onClick = onBuyHints,
-                        enabled = coins >= 50,
+                        enabled = coins >= 10,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = PixelGold,
                             contentColor = Color(0xFF1E1400)
@@ -898,7 +1470,7 @@ private fun SuppliesTabContent(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "50 🪙",
+                            text = "10 🪙",
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace
@@ -963,9 +1535,13 @@ private fun SuppliesTabContent(
     }
 }
 
-// ================= TAB 3: ADS & REWARDS =================
+// ================= TAB 4: ADS & REWARDS =================
 @Composable
 private fun AdsAndRewardsTabContent(
+    isDailyClaimable: Boolean,
+    isFreeSpinAvailable: Boolean,
+    onOpenDailyGift: () -> Unit,
+    onOpenLuckySpin: () -> Unit,
     onWatchAdForCoins: () -> Unit,
     onWatchAdForHints: () -> Unit
 ) {
@@ -974,6 +1550,134 @@ private fun AdsAndRewardsTabContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 20.dp)
     ) {
+        // Daily Login Gift Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = if (isDailyClaimable) Color(0xFF332002) else DungeonCard),
+                border = BorderStroke(1.5.dp, if (isDailyClaimable) PixelGold else DungeonBorder)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(PixelGold.copy(alpha = 0.2f))
+                                .border(1.dp, PixelGold, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "🎁", fontSize = 22.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "DAILY LOGIN VAULT",
+                                color = PixelGold,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = if (isDailyClaimable) "Gift ready to claim! 🔴" else "Claimed today • Resets tomorrow",
+                                color = if (isDailyClaimable) PixelAmber else RetroTextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onOpenDailyGift,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PixelGold,
+                            contentColor = Color(0xFF1E1400)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isDailyClaimable) "CLAIM 🎁" else "VIEW 🎁",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+
+        // Lucky Spin Wheel Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = if (isFreeSpinAvailable) Color(0xFF0F2618) else DungeonCard),
+                border = BorderStroke(1.5.dp, if (isFreeSpinAvailable) PixelEmerald else DungeonBorder)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(PixelEmerald.copy(alpha = 0.2f))
+                                .border(1.dp, PixelEmerald, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "🎡", fontSize = 22.sp)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "LUCKY FORTUNE WHEEL",
+                                color = PixelEmerald,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = if (isFreeSpinAvailable) "Free daily spin ready! 🔴" else "Spin with video ad for prizes",
+                                color = if (isFreeSpinAvailable) PixelEmerald else RetroTextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onOpenLuckySpin,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PixelEmerald,
+                            contentColor = Color(0xFF002410)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "SPIN 🎡",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -983,11 +1687,11 @@ private fun AdsAndRewardsTabContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "🎁", fontSize = 24.sp)
+                        Text(text = "🎬", fontSize = 24.sp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "DAILY SPONSORED CHESTS",
+                                text = "VIDEO REWARD CHESTS",
                                 color = PixelAmber,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Black,
@@ -1040,7 +1744,7 @@ private fun AdsAndRewardsTabContent(
                                 fontFamily = FontFamily.Monospace
                             )
                             Text(
-                                text = "Instant +75 Gold Coins",
+                                text = "Instant +5 Gold Coins",
                                 color = PixelGold,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
@@ -1058,7 +1762,7 @@ private fun AdsAndRewardsTabContent(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "CLAIM +75 🪙",
+                            text = "CLAIM +5 🪙",
                             fontWeight = FontWeight.Black,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace
@@ -1131,121 +1835,6 @@ private fun AdsAndRewardsTabContent(
                 }
             }
         }
-    }
-}
-
-// ================= TAB 4: VIP PASS (NO ADS) =================
-@Composable
-private fun VipPassTabContent(
-    adsRemoved: Boolean,
-    onBuyNoAds: () -> Unit
-) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 20.dp)
-    ) {
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (adsRemoved) Color(0xFF0E291B) else Color(0xFF261C3B)
-                ),
-                border = BorderStroke(2.dp, if (adsRemoved) PixelEmerald else PixelPurple)
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "👑", fontSize = 28.sp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "ROYAL VIP MEMBERSHIP",
-                                    color = if (adsRemoved) PixelEmerald else PixelGold,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                                Text(
-                                    text = if (adsRemoved) "ACTIVE • LIFETIME ACCESS" else "ONE-TIME UNLOCK",
-                                    color = if (adsRemoved) PixelEmerald else PixelCyan,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-
-                        if (adsRemoved) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(PixelEmerald.copy(alpha = 0.2f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "OWNED ✓",
-                                    color = PixelEmerald,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    VipFeatureRow(icon = "🚫", text = "Remove all Banner & Interstitial Advertisements")
-                    VipFeatureRow(icon = "⚡", text = "Lightning-fast room load without interruptions")
-                    VipFeatureRow(icon = "✨", text = "Permanent Royal Champion badge on profile")
-                    VipFeatureRow(icon = "🛡️", text = "Directly support the game development")
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    if (!adsRemoved) {
-                        Button(
-                            onClick = onBuyNoAds,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = PixelGold,
-                                contentColor = Color(0xFF1E1400)
-                            ),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text(
-                                text = "UNLOCK FOREVER — $1.99",
-                                fontWeight = FontWeight.Black,
-                                fontSize = 14.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun VipFeatureRow(icon: String, text: String) {
-    Row(
-        modifier = Modifier.padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = icon, fontSize = 14.sp)
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = text,
-            color = RetroTextPrimary,
-            fontSize = 12.sp,
-            fontFamily = FontFamily.Monospace
-        )
     }
 }
 

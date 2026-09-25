@@ -34,6 +34,7 @@ fun DungeonGameBoard(
     onMove: (Direction) -> Unit,
     hintPos: Position? = null,
     heroSkin: com.example.model.HeroSkin = com.example.model.HeroSkin.SILVER_KNIGHT,
+    dungeonTheme: com.example.model.DungeonTheme = com.example.model.DungeonTheme.DEFAULT_CRYPT,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "dungeon_anim")
@@ -93,8 +94,8 @@ fun DungeonGameBoard(
                     )
                 }
         ) {
-            // Draw background fill
-            drawRect(Color(0xFF0A0C13), Offset.Zero, Size(size.width, size.height))
+            // Draw background fill using theme board background
+            drawRect(Color(dungeonTheme.boardBgColorHex), Offset.Zero, Size(size.width, size.height))
 
             // 1. Draw Static / Base Tiles
             for (y in 0 until gameState.height) {
@@ -106,8 +107,24 @@ fun DungeonGameBoard(
                     val effectiveTile = gameState.getEffectiveTile(pos)
 
                     when (effectiveTile) {
-                        TileType.WALL -> PixelSprites.drawWall(this, px, py, tileSize)
-                        TileType.FLOOR -> PixelSprites.drawFloor(this, px, py, tileSize)
+                        TileType.WALL -> PixelSprites.drawWall(
+                            scope = this,
+                            x = px,
+                            y = py,
+                            tileSize = tileSize,
+                            darkStone = Color(dungeonTheme.wallDarkColorHex),
+                            midStone = Color(dungeonTheme.wallMidColorHex),
+                            lightStone = Color(dungeonTheme.wallLightColorHex),
+                            highlight = Color(dungeonTheme.wallHighlightHex)
+                        )
+                        TileType.FLOOR -> PixelSprites.drawFloor(
+                            scope = this,
+                            x = px,
+                            y = py,
+                            tileSize = tileSize,
+                            floorBg = Color(dungeonTheme.floorBgColorHex),
+                            tileAccent = Color(dungeonTheme.floorAccentColorHex)
+                        )
                         TileType.TARGET -> {
                             val isFilled = gameState.crates.containsKey(pos)
                             PixelSprites.drawTarget(this, px, py, tileSize, isFilled)

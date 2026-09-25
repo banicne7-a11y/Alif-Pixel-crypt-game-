@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,6 +59,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import com.example.ui.components.DailyRewardDialog
+import com.example.ui.components.LuckySpinDialog
+import com.example.ui.components.AchievementsDialog
+import com.example.ui.components.PlayerStatsDialog
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +77,7 @@ import com.example.ui.theme.DungeonCard
 import com.example.ui.theme.DungeonDarkBg
 import com.example.ui.theme.DungeonSurface
 import com.example.ui.theme.PixelCyan
+import com.example.ui.theme.PixelEmerald
 import com.example.ui.theme.PixelGold
 import com.example.ui.theme.PixelPurple
 import com.example.ui.theme.PixelRuby
@@ -86,13 +92,24 @@ fun MainMenuScreen(
     val totalStars by viewModel.totalStarsCount.collectAsStateWithLifecycle()
     val unlockedRelics by viewModel.unlockedRelics.collectAsStateWithLifecycle()
     val coins by viewModel.goldCoins.collectAsStateWithLifecycle()
+    val freeHints by viewModel.freeHints.collectAsStateWithLifecycle()
+    val progressList by viewModel.levelProgressList.collectAsStateWithLifecycle()
     val crtEnabled by viewModel.crtFilterEnabled.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
     val playerName by viewModel.playerName.collectAsStateWithLifecycle()
     val currentSkin by viewModel.selectedSkin.collectAsStateWithLifecycle()
 
+    val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
+    val isDailyRewardClaimable by viewModel.isDailyRewardClaimable.collectAsStateWithLifecycle()
+    val isFreeSpinAvailable by viewModel.isFreeSpinAvailable.collectAsStateWithLifecycle()
+    val claimedAchievements by viewModel.claimedAchievementIds.collectAsStateWithLifecycle()
+
     var showNameEditDialog by remember { mutableStateOf(false) }
     var editedNameText by remember { mutableStateOf(playerName) }
+    var showDailyRewardDialog by remember { mutableStateOf(false) }
+    var showLuckySpinDialog by remember { mutableStateOf(false) }
+    var showAchievementsDialog by remember { mutableStateOf(false) }
+    var showPlayerStatsDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -116,8 +133,7 @@ fun MainMenuScreen(
                     .background(DungeonSurface)
                     .border(BorderStroke(1.dp, PixelGold.copy(alpha = 0.6f)), RoundedCornerShape(12.dp))
                     .clickable {
-                        editedNameText = playerName
-                        showNameEditDialog = true
+                        showPlayerStatsDialog = true
                     }
                     .padding(horizontal = 14.dp, vertical = 8.dp)
                     .testTag("player_profile_bar"),
@@ -397,6 +413,60 @@ fun MainMenuScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // Daily Rewards & Lucky Fortune Wheel Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Button(
+                    onClick = { showDailyRewardDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp)
+                        .testTag("daily_reward_button"),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isDailyRewardClaimable) Color(0xFF332002) else DungeonCard,
+                        contentColor = PixelGold
+                    ),
+                    border = BorderStroke(1.5.dp, if (isDailyRewardClaimable) PixelGold else DungeonBorder),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(text = "🎁", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isDailyRewardClaimable) "DAILY GIFT • 🔴" else "DAILY GIFT",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Button(
+                    onClick = { showLuckySpinDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp)
+                        .testTag("lucky_wheel_button"),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isFreeSpinAvailable) Color(0xFF0F2618) else DungeonCard,
+                        contentColor = PixelEmerald
+                    ),
+                    border = BorderStroke(1.5.dp, if (isFreeSpinAvailable) PixelEmerald else DungeonBorder),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(text = "🎡", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isFreeSpinAvailable) "LUCKY SPIN • 🔴" else "LUCKY SPIN",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             // Crypt Bazaar & Skins Shop
             Button(
                 onClick = { viewModel.navigateTo(ScreenState.SHOP) },
@@ -424,35 +494,29 @@ fun MainMenuScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Two Half Width Buttons: Maker Mode & Relic Vault
+            // Three Action Buttons: Maker Mode, Relic Vault, & Trophy Hall
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
                     onClick = { viewModel.navigateTo(ScreenState.MAKER) },
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
+                        .height(50.dp)
                         .testTag("maker_mode_button"),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = DungeonCard,
                         contentColor = PixelPurple
                     ),
                     border = BorderStroke(1.dp, DungeonBorder),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Build,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = PixelPurple
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "MAKER",
+                        text = "🔨 MAKER",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace
                     )
                 }
@@ -461,21 +525,43 @@ fun MainMenuScreen(
                     onClick = { viewModel.navigateTo(ScreenState.RELIC_GALLERY) },
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
+                        .height(50.dp)
                         .testTag("relic_vault_button"),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = DungeonCard,
                         contentColor = PixelRuby
                     ),
                     border = BorderStroke(1.dp, DungeonBorder),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     Text(
                         text = "🏺 VAULT",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = PixelRuby
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { showAchievementsDialog = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
+                        .testTag("trophies_button"),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = DungeonCard,
+                        contentColor = PixelCyan
+                    ),
+                    border = BorderStroke(1.dp, DungeonBorder),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    Text(
+                        text = "🏆 TROPHIES",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }
@@ -587,6 +673,15 @@ fun MainMenuScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Banner Ad at bottom of Main Menu
+            com.example.ads.AdMobBanner(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             Text(
                 text = "CREATOR: ALIF • PIXEL CRYPT ENGINE V2.0 (200 LEVELS)",
                 fontSize = 11.sp,
@@ -650,6 +745,62 @@ fun MainMenuScreen(
                         Text("CANCEL", color = RetroTextSecondary, fontFamily = FontFamily.Monospace)
                     }
                 }
+            )
+        }
+
+        // Daily Login Bonus Dialog
+        if (showDailyRewardDialog) {
+            DailyRewardDialog(
+                currentStreak = dailyStreak,
+                isClaimable = isDailyRewardClaimable,
+                onClaim = { viewModel.claimDailyReward() },
+                onDismiss = { showDailyRewardDialog = false }
+            )
+        }
+
+        // Lucky Fortune Spin Wheel Dialog
+        if (showLuckySpinDialog) {
+            LuckySpinDialog(
+                isFreeSpinAvailable = isFreeSpinAvailable,
+                onSpin = { isRewarded, onResult ->
+                    viewModel.spinWheel(isRewarded) { idx, c, h, desc ->
+                        onResult(idx, c, h, desc)
+                    }
+                },
+                onDismiss = { showLuckySpinDialog = false }
+            )
+        }
+
+        // Trophy & Achievement Hall Dialog
+        if (showAchievementsDialog) {
+            AchievementsDialog(
+                claimedIds = claimedAchievements,
+                totalLevelsCleared = progressList.count { it.completed },
+                totalStars = totalStars ?: 0,
+                totalRelics = unlockedRelics.size,
+                currentHints = freeHints,
+                currentCoins = coins,
+                onClaim = { id, c, h -> viewModel.claimAchievement(id, c, h) },
+                onDismiss = { showAchievementsDialog = false }
+            )
+        }
+
+        // Player Stats & Dossier Dialog
+        if (showPlayerStatsDialog) {
+            PlayerStatsDialog(
+                playerName = playerName,
+                heroSkin = currentSkin,
+                levelsCleared = progressList.count { it.completed },
+                totalStars = totalStars ?: 0,
+                relicsCount = unlockedRelics.size,
+                dailyStreak = dailyStreak,
+                coins = coins,
+                hints = freeHints,
+                onEditName = {
+                    editedNameText = playerName
+                    showNameEditDialog = true
+                },
+                onDismiss = { showPlayerStatsDialog = false }
             )
         }
     }

@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -9,6 +11,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,9 +51,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -88,7 +94,7 @@ fun GamePlayScreen(
     val coins by viewModel.goldCoins.collectAsStateWithLifecycle()
     val freeHints by viewModel.freeHints.collectAsStateWithLifecycle()
     val heroSkin by viewModel.selectedSkin.collectAsStateWithLifecycle()
-    val adsRemoved by viewModel.adsRemoved.collectAsStateWithLifecycle()
+    val dungeonTheme by viewModel.selectedTheme.collectAsStateWithLifecycle()
     val adToast by viewModel.adRewardToast.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -338,6 +344,7 @@ fun GamePlayScreen(
                     onMove = { dir -> viewModel.onMove(dir) },
                     hintPos = hintPos,
                     heroSkin = heroSkin,
+                    dungeonTheme = dungeonTheme,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -375,65 +382,104 @@ fun GamePlayScreen(
                     )
                 }
 
-                // D-Pad Cross Layout
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(end = 8.dp)
+                // Arcade Gamepad Control Deck
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF161926), Color(0xFF0D0F18))
+                            )
+                        )
+                        .border(
+                            BorderStroke(
+                                1.5.dp,
+                                Brush.verticalGradient(listOf(Color(0xFF323A54), Color(0xFF191D2C)))
+                            ),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(6.dp)
                 ) {
-                    // UP
-                    DpadButton(
-                        icon = Icons.Default.KeyboardArrowUp,
-                        contentDesc = "Move Up",
-                        tag = "dpad_up",
-                        onClick = { viewModel.onMove(Direction.UP) }
-                    )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // LEFT
+                        // UP BUTTON
                         DpadButton(
-                            icon = Icons.Default.KeyboardArrowLeft,
-                            contentDesc = "Move Left",
-                            tag = "dpad_left",
-                            onClick = { viewModel.onMove(Direction.LEFT) }
+                            icon = Icons.Default.KeyboardArrowUp,
+                            contentDesc = "Move Up",
+                            tag = "dpad_up",
+                            primaryColor = PixelGold,
+                            onClick = { viewModel.onMove(Direction.UP) }
                         )
 
-                        // Center action / Rotate
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (gameState.mirrors.isNotEmpty()) PixelCyan.copy(alpha = 0.2f) else DungeonSurface)
-                                .clickable { viewModel.onRotateMirror() }
-                                .border(BorderStroke(1.dp, DungeonBorder), RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.RotateRight,
-                                contentDescription = "Action",
-                                tint = if (gameState.mirrors.isNotEmpty()) PixelCyan else RetroTextSecondary.copy(alpha = 0.3f),
-                                modifier = Modifier.size(20.dp)
+                            // LEFT BUTTON
+                            DpadButton(
+                                icon = Icons.Default.KeyboardArrowLeft,
+                                contentDesc = "Move Left",
+                                tag = "dpad_left",
+                                primaryColor = PixelCyan,
+                                onClick = { viewModel.onMove(Direction.LEFT) }
+                            )
+
+                            // CENTER / ACTION BUTTON
+                            Box(
+                                modifier = Modifier
+                                    .size(54.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            if (gameState.mirrors.isNotEmpty()) {
+                                                listOf(Color(0xFF0F2B3E), Color(0xFF061824))
+                                            } else {
+                                                listOf(Color(0xFF1E2232), Color(0xFF12141F))
+                                            }
+                                        )
+                                    )
+                                    .border(
+                                        BorderStroke(
+                                            1.5.dp,
+                                            if (gameState.mirrors.isNotEmpty()) PixelCyan else DungeonBorder
+                                        ),
+                                        RoundedCornerShape(12.dp)
+                                    )
+                                    .clickable { viewModel.onRotateMirror() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                                    contentDescription = "Rotate Mirror",
+                                    tint = if (gameState.mirrors.isNotEmpty()) PixelCyan else RetroTextSecondary.copy(alpha = 0.4f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // RIGHT BUTTON
+                            DpadButton(
+                                icon = Icons.Default.KeyboardArrowRight,
+                                contentDesc = "Move Right",
+                                tag = "dpad_right",
+                                primaryColor = PixelCyan,
+                                onClick = { viewModel.onMove(Direction.RIGHT) }
                             )
                         }
 
-                        // RIGHT
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // DOWN BUTTON
                         DpadButton(
-                            icon = Icons.Default.KeyboardArrowRight,
-                            contentDesc = "Move Right",
-                            tag = "dpad_right",
-                            onClick = { viewModel.onMove(Direction.RIGHT) }
+                            icon = Icons.Default.KeyboardArrowDown,
+                            contentDesc = "Move Down",
+                            tag = "dpad_down",
+                            primaryColor = PixelGold,
+                            onClick = { viewModel.onMove(Direction.DOWN) }
                         )
                     }
-
-                    // DOWN
-                    DpadButton(
-                        icon = Icons.Default.KeyboardArrowDown,
-                        contentDesc = "Move Down",
-                        tag = "dpad_down",
-                        onClick = { viewModel.onMove(Direction.DOWN) }
-                    )
                 }
             }
         }
@@ -513,11 +559,11 @@ fun GamePlayScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Gold coins reward display
+                        // Gold coins reward display (1 to 5 coins max)
                         val coinsWon = when (earnedStars) {
-                            3 -> 50
-                            2 -> 35
-                            else -> 20
+                            3 -> 5
+                            2 -> 3
+                            else -> 1
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -578,14 +624,10 @@ fun GamePlayScreen(
 
                         Button(
                             onClick = {
-                                if (!adsRemoved) {
-                                    com.example.ads.AdMobManager.showInterstitial(
-                                        context = context,
-                                        onDismiss = { viewModel.onNextLevel() }
-                                    )
-                                } else {
-                                    viewModel.onNextLevel()
-                                }
+                                com.example.ads.AdMobManager.showInterstitial(
+                                    context = context,
+                                    onDismiss = { viewModel.onNextLevel() }
+                                )
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -768,23 +810,78 @@ private fun DpadButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDesc: String,
     tag: String,
+    primaryColor: Color = PixelGold,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1.0f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 800f),
+        label = "dpad_scale"
+    )
+
+    val elevationColor = if (isPressed) Color(0xFF10121A) else Color(0xFF1E2232)
+
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(DungeonCard)
-            .border(BorderStroke(1.dp, DungeonBorder), RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
+            .size(54.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = if (isPressed) {
+                        listOf(Color(0xFF141724), Color(0xFF1C2133))
+                    } else {
+                        listOf(Color(0xFF282D42), Color(0xFF181B28))
+                    }
+                )
+            )
+            .border(
+                BorderStroke(
+                    width = if (isPressed) 2.dp else 1.5.dp,
+                    brush = if (isPressed) {
+                        Brush.verticalGradient(listOf(primaryColor, primaryColor.copy(alpha = 0.5f)))
+                    } else {
+                        Brush.verticalGradient(listOf(Color(0xFF454D70), DungeonBorder))
+                    }
+                ),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
             .testTag(tag),
         contentAlignment = Alignment.Center
     ) {
+        // Inner inset highlight line
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(3.dp)
+                .border(
+                    BorderStroke(1.dp, if (isPressed) primaryColor.copy(alpha = 0.4f) else Color(0x22FFFFFF)),
+                    RoundedCornerShape(9.dp)
+                )
+        )
+
+        // Arrow Icon with Neon Glow
         Icon(
             imageVector = icon,
             contentDescription = contentDesc,
-            tint = PixelGold,
-            modifier = Modifier.size(28.dp)
+            tint = if (isPressed) Color.White else primaryColor,
+            modifier = Modifier
+                .size(34.dp)
+                .graphicsLayer {
+                    // Slight shadow drop
+                    shadowElevation = if (isPressed) 0f else 6f
+                }
         )
     }
 }

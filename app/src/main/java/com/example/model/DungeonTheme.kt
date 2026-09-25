@@ -1,0 +1,101 @@
+package com.example.model
+
+enum class DungeonTheme(
+    val id: String,
+    val displayName: String,
+    val title: String,
+    val costCoins: Int,
+    val wallDarkColorHex: Long,
+    val wallMidColorHex: Long,
+    val wallLightColorHex: Long,
+    val wallHighlightHex: Long,
+    val floorBgColorHex: Long,
+    val floorAccentColorHex: Long,
+    val boardBgColorHex: Long,
+    val lore: String
+) {
+    DEFAULT_CRYPT(
+        id = "theme_crypt",
+        displayName = "Stone Crypt",
+        title = "Ancient Bastion",
+        costCoins = 0,
+        wallDarkColorHex = 0xFF1B1D2A,
+        wallMidColorHex = 0xFF2E3248,
+        wallLightColorHex = 0xFF454B6B,
+        wallHighlightHex = 0xFF656D94,
+        floorBgColorHex = 0xFF141724,
+        floorAccentColorHex = 0xFF1C2033,
+        boardBgColorHex = 0xFF0A0C13,
+        lore = "The classic granite brickwork of the royal catacombs."
+    ),
+    INFERNAL_MAGMA(
+        id = "theme_magma",
+        displayName = "Infernal Forge",
+        title = "Volcanic Bricks",
+        costCoins = 35,
+        wallDarkColorHex = 0xFF2A0D08,
+        wallMidColorHex = 0xFF4E160D,
+        wallLightColorHex = 0xFF7A2413,
+        wallHighlightHex = 0xFFFF5722,
+        floorBgColorHex = 0xFF1F0B08,
+        floorAccentColorHex = 0xFF35120B,
+        boardBgColorHex = 0xFF100504,
+        lore = "Obsidian bricks fired in subterranean lava rivers."
+    ),
+    GLACIER_TEMPLE(
+        id = "theme_glacier",
+        displayName = "Glacial Ice",
+        title = "Frost Sanctum",
+        costCoins = 55,
+        wallDarkColorHex = 0xFF0B2136,
+        wallMidColorHex = 0xFF163E5E,
+        wallLightColorHex = 0xFF266699,
+        wallHighlightHex = 0xFF4FC3F7,
+        floorBgColorHex = 0xFF0A1826,
+        floorAccentColorHex = 0xFF112940,
+        boardBgColorHex = 0xFF050E17,
+        lore = "Chiseled blocks of eternal glacial frost with crystal sheen."
+    ),
+    GOLDEN_SANCTUARY(
+        id = "theme_gold",
+        displayName = "Gilded Palace",
+        title = "Imperial Treasury",
+        costCoins = 80,
+        wallDarkColorHex = 0xFF332002,
+        wallMidColorHex = 0xFF5C3B04,
+        wallLightColorHex = 0xFF8A5A0A,
+        wallHighlightHex = 0xFFFFD700,
+        floorBgColorHex = 0xFF221603,
+        floorAccentColorHex = 0xFF382506,
+        boardBgColorHex = 0xFF120B02,
+        lore = "Luxurious gold-lined bricks sculpted for emperors."
+    ),
+    EMERALD_RUINS(
+        id = "theme_emerald",
+        displayName = "Emerald Moss",
+        title = "Jungle Shrine",
+        costCoins = 110,
+        wallDarkColorHex = 0xFF0C2417,
+        wallMidColorHex = 0xFF18452B,
+        wallLightColorHex = 0xFF286E45,
+        wallHighlightHex = 0xFF00E676,
+        floorBgColorHex = 0xFF0A1A12,
+        floorAccentColorHex = 0xFF132F20,
+        boardBgColorHex = 0xFF050E0A,
+        lore = "Ancient stone overgrown with luminescent subterranean moss."
+    ),
+    VOID_NEBULA(
+        id = "theme_void",
+        displayName = "Abyssal Void",
+        title = "Cosmic Rift",
+        costCoins = 150,
+        wallDarkColorHex = 0xFF180A2E,
+        wallMidColorHex = 0xFF2D1452,
+        wallLightColorHex = 0xFF492285,
+        wallHighlightHex = 0xFFD500F9,
+        floorBgColorHex = 0xFF120624,
+        floorAccentColorHex = 0xFF200B3E,
+        boardBgColorHex = 0xFF080212,
+        lore = "Dimensional dark matter stones pulsing with purple rift magic."
+    )
+}
