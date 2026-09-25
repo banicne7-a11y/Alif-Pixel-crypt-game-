@@ -1,0 +1,6 @@
+{
+  "name": "ALIF • PIXEL CRYPT",
+  "description": "A 2D retro pixel art dungeon puzzle game by Alif featuring 200 levels, block pushing, ancient traps, relics, sound synthesizer, and custom level creator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
