@@ -118,6 +118,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    init {
+        viewModelScope.launch {
+            rtdbManager.initializeDatabase()
+        }
+    }
+
     private val _goldCoins = MutableStateFlow(prefs.getInt("gold_coins", 150)) // start with 150 bonus coins
     val goldCoins: StateFlow<Int> = _goldCoins.asStateFlow()
 

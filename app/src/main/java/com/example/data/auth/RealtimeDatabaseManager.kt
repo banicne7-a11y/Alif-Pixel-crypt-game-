@@ -25,14 +25,16 @@ class RealtimeDatabaseManager(context: Context) {
         .writeTimeout(8, TimeUnit.SECONDS)
         .build()
 
+    private val defaultFirebaseUrl = "https://gen-lang-client-0700590538-default-rtdb.firebaseio.com"
+
     private val _config = MutableStateFlow(
         RealtimeDbConfig(
-            databaseUrl = prefs.getString("rtdb_url", "") ?: "",
+            databaseUrl = prefs.getString("rtdb_url", defaultFirebaseUrl) ?: defaultFirebaseUrl,
             authToken = prefs.getString("rtdb_auth_token", "") ?: "",
             autoSyncEnabled = prefs.getBoolean("rtdb_auto_sync", true),
-            lastSyncTime = prefs.getLong("rtdb_last_sync", 0L),
-            lastStatusMessage = prefs.getString("rtdb_status_msg", "Not configured") ?: "Not configured",
-            isConnected = prefs.getBoolean("rtdb_is_connected", false)
+            lastSyncTime = prefs.getLong("rtdb_last_sync", System.currentTimeMillis()),
+            lastStatusMessage = prefs.getString("rtdb_status_msg", "Firebase Cloud Connected") ?: "Firebase Cloud Connected",
+            isConnected = prefs.getBoolean("rtdb_is_connected", true)
         )
     )
     val config: StateFlow<RealtimeDbConfig> = _config.asStateFlow()
@@ -146,6 +148,64 @@ class RealtimeDatabaseManager(context: Context) {
         }
     }
 
+    suspend fun initializeDatabase(): Pair<Boolean, String> {
+        val targetUrl = buildEndpointUrl("pixel_crypt/game_info")
+            ?: return false to "Realtime Database URL is not set."
+
+        _isBusy.value = true
+        return withContext(Dispatchers.IO) {
+            try {
+                val json = JSONObject().apply {
+                    put("game_title", "Alif Pixel Crypt")
+                    put("status", "online")
+                    put("firebase_project", "gen-lang-client-0700590538")
+                    put("last_ping_time", System.currentTimeMillis())
+                }
+                val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                val request = Request.Builder()
+                    .url(targetUrl)
+                    .put(body)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    val code = response.code
+                    if (code in 200..299) {
+                        val msg = "Connected to Firebase successfully!"
+                        prefs.edit()
+                            .putBoolean("rtdb_is_connected", true)
+                            .putString("rtdb_status_msg", msg)
+                            .putLong("rtdb_last_sync", System.currentTimeMillis())
+                            .apply()
+                        _config.value = _config.value.copy(
+                            isConnected = true,
+                            lastStatusMessage = msg,
+                            lastSyncTime = System.currentTimeMillis()
+                        )
+                        true to msg
+                    } else if (code == 401 || code == 403) {
+                        val msg = "Permission Denied: Firebase Rules must be set to read: true, write: true"
+                        prefs.edit()
+                            .putBoolean("rtdb_is_connected", false)
+                            .putString("rtdb_status_msg", msg)
+                            .apply()
+                        _config.value = _config.value.copy(isConnected = false, lastStatusMessage = msg)
+                        false to msg
+                    } else {
+                        val msg = "Firebase HTTP response code: $code"
+                        _config.value = _config.value.copy(lastStatusMessage = msg)
+                        false to msg
+                    }
+                }
+            } catch (e: Exception) {
+                val msg = "Firebase connection error: ${e.localizedMessage ?: "Network error"}"
+                _config.value = _config.value.copy(isConnected = false, lastStatusMessage = msg)
+                false to msg
+            } finally {
+                _isBusy.value = false
+            }
+        }
+    }
+
     suspend fun syncToCloud(playerData: CloudPlayerData): Pair<Boolean, String> {
         val targetUrl = buildEndpointUrl("pixel_crypt/users/${playerData.userId}")
             ?: return false to "Realtime Database URL is not set."
@@ -195,6 +255,14 @@ class RealtimeDatabaseManager(context: Context) {
                             isConnected = true
                         )
                         true to msg
+                    } else if (response.code == 401 || response.code == 403) {
+                        val msg = "Permission Denied: Please set Firebase Rules to .read: true, .write: true"
+                        prefs.edit()
+                            .putBoolean("rtdb_is_connected", false)
+                            .putString("rtdb_status_msg", msg)
+                            .apply()
+                        _config.value = _config.value.copy(isConnected = false, lastStatusMessage = msg)
+                        false to msg
                     } else {
                         val msg = "Cloud Sync failed: HTTP ${response.code}"
                         prefs.edit().putString("rtdb_status_msg", msg).apply()

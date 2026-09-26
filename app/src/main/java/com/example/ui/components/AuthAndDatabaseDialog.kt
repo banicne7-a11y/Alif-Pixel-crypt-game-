@@ -13,19 +13,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,7 +36,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -55,7 +49,6 @@ import java.util.Locale
 enum class AuthTab {
     LOGIN,
     REGISTER,
-    REALTIME_DB,
     ACCOUNT
 }
 
@@ -93,12 +86,8 @@ fun AuthAndDatabaseDialog(
     var regError by remember { mutableStateOf<String?>(null) }
     var isRegistering by remember { mutableStateOf(false) }
 
-    // Realtime Database Form State
-    var rtdbUrl by remember { mutableStateOf(rtdbConfig.databaseUrl) }
-    var rtdbToken by remember { mutableStateOf(rtdbConfig.authToken) }
-    var rtdbAutoSync by remember { mutableStateOf(rtdbConfig.autoSyncEnabled) }
-    var rtdbStatusMsg by remember { mutableStateOf(rtdbConfig.lastStatusMessage) }
-    var isTestingConnection by remember { mutableStateOf(false) }
+    // Sync notification state
+    var cloudStatusNotice by remember { mutableStateOf<String?>(null) }
     var isSyncingNow by remember { mutableStateOf(false) }
     var isRestoringNow by remember { mutableStateOf(false) }
 
@@ -109,7 +98,7 @@ fun AuthAndDatabaseDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp)
-                .testTag("auth_and_database_dialog"),
+                .testTag("auth_dialog"),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = DungeonSurface),
             border = BorderStroke(2.dp, PixelCyan)
@@ -117,7 +106,7 @@ fun AuthAndDatabaseDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(18.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 // Header Row
@@ -127,18 +116,16 @@ fun AuthAndDatabaseDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CloudSync,
-                            contentDescription = "Cloud & Auth",
-                            tint = PixelCyan,
-                            modifier = Modifier.size(24.dp)
+                        Text(
+                            text = "🔥",
+                            fontSize = 20.sp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "PLAYER CLOUD & AUTH",
+                            text = if (currentUser != null) "PLAYER PROFILE" else "PLAYER LOGIN",
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
+                            fontSize = 16.sp,
                             color = RetroTextPrimary
                         )
                     }
@@ -156,56 +143,43 @@ fun AuthAndDatabaseDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Navigation Tabs
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(DungeonDarkBg)
-                        .padding(3.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    if (currentUser == null) {
+                // Navigation Tabs (Only Login & Register when logged out, or Account when logged in)
+                if (currentUser == null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(DungeonDarkBg)
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
                         TabButton(
-                            title = "LOGIN",
+                            title = "LOG IN",
                             isSelected = selectedTab == AuthTab.LOGIN,
                             onClick = { selectedTab = AuthTab.LOGIN },
-                            testTag = "tab_login"
+                            testTag = "tab_login",
+                            modifier = Modifier.weight(1f)
                         )
                         TabButton(
                             title = "REGISTER",
                             isSelected = selectedTab == AuthTab.REGISTER,
                             onClick = { selectedTab = AuthTab.REGISTER },
-                            testTag = "tab_register"
-                        )
-                    } else {
-                        TabButton(
-                            title = "PROFILE",
-                            isSelected = selectedTab == AuthTab.ACCOUNT,
-                            onClick = { selectedTab = AuthTab.ACCOUNT },
-                            testTag = "tab_profile"
+                            testTag = "tab_register",
+                            modifier = Modifier.weight(1f)
                         )
                     }
-
-                    TabButton(
-                        title = "REALTIME DB",
-                        isSelected = selectedTab == AuthTab.REALTIME_DB,
-                        onClick = { selectedTab = AuthTab.REALTIME_DB },
-                        testTag = "tab_realtime_db"
-                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
 
                 // Tab Content
                 when (selectedTab) {
                     AuthTab.LOGIN -> {
                         // --- LOGIN FORM ---
                         Text(
-                            text = "Welcome Back, Dungeon Explorer!",
-                            fontSize = 13.sp,
+                            text = "Log in to save your score, coins & stars to Firebase Cloud.",
+                            fontSize = 12.sp,
                             color = RetroTextSecondary,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
@@ -309,7 +283,7 @@ fun AuthAndDatabaseDialog(
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black, strokeWidth = 2.dp)
                             } else {
                                 Text(
-                                    text = "LOG IN",
+                                    text = "LOG IN & SYNC",
                                     color = Color.Black,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace
@@ -317,7 +291,7 @@ fun AuthAndDatabaseDialog(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -338,7 +312,7 @@ fun AuthAndDatabaseDialog(
                     AuthTab.REGISTER -> {
                         // --- REGISTER FORM ---
                         Text(
-                            text = "Create your Pixel Crypt account for cloud progress sync.",
+                            text = "Create an account to automatically sync coins, relics & progress with Firebase.",
                             fontSize = 12.sp,
                             color = RetroTextSecondary,
                             modifier = Modifier.padding(bottom = 12.dp)
@@ -504,7 +478,7 @@ fun AuthAndDatabaseDialog(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -587,12 +561,44 @@ fun AuthAndDatabaseDialog(
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
-                                Text(
-                                    text = "Account ID: ${currentUser?.id?.take(8) ?: "offline"}...",
-                                    fontSize = 11.sp,
-                                    color = RetroTextDisabled,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                                // Firebase Cloud Status Indicator
+                                val isConnected = rtdbConfig.isConnected
+                                val statusText = cloudStatusNotice ?: rtdbConfig.lastStatusMessage
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isConnected) PixelEmerald.copy(alpha = 0.12f) else PixelRuby.copy(alpha = 0.12f))
+                                        .border(1.dp, if (isConnected) PixelEmerald else PixelRuby, RoundedCornerShape(8.dp))
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isConnected) Icons.Default.CheckCircle else Icons.Default.Close,
+                                        contentDescription = null,
+                                        tint = if (isConnected) PixelEmerald else PixelRuby,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isConnected) "Firebase: Active (gen-lang-client-0700590538) 🔥" else "Firebase: Setup Required",
+                                        fontSize = 11.sp,
+                                        color = if (isConnected) PixelEmerald else PixelRuby,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                if (statusText.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = statusText,
+                                        fontSize = 10.sp,
+                                        color = if (isConnected) PixelGold else PixelRuby,
+                                        lineHeight = 14.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
 
                                 val sdf = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
                                 val joined = sdf.format(Date(currentUser?.createdAt ?: System.currentTimeMillis()))
@@ -604,269 +610,68 @@ fun AuthAndDatabaseDialog(
 
                                 Spacer(modifier = Modifier.height(14.dp))
 
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    OutlinedButton(
-                                        onClick = { selectedTab = AuthTab.REALTIME_DB },
-                                        modifier = Modifier.weight(1f).height(40.dp).testTag("go_to_rtdb_button"),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, PixelCyan)
-                                    ) {
-                                        Icon(Icons.Default.Storage, contentDescription = null, tint = PixelCyan, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Cloud DB", color = PixelCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
+                                // Cloud Sync & Restore Buttons
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                     Button(
                                         onClick = {
-                                            onLogout()
-                                            selectedTab = AuthTab.LOGIN
+                                            isSyncingNow = true
+                                            onSyncToCloud { success, msg ->
+                                                isSyncingNow = false
+                                                cloudStatusNotice = if (success) "Progress saved to Firebase!" else msg
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f).height(40.dp).testTag("logout_button"),
+                                        enabled = !isSyncingNow && !isRtdbBusy,
+                                        modifier = Modifier.weight(1f).height(40.dp).testTag("sync_to_cloud_button"),
                                         shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = PixelRuby)
+                                        colors = ButtonDefaults.buttonColors(containerColor = PixelEmerald)
                                     ) {
-                                        Text("LOG OUT", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    AuthTab.REALTIME_DB -> {
-                        // --- REALTIME DATABASE SETTINGS TAB ---
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            // Status Card
-                            Card(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (rtdbConfig.isConnected) PixelEmerald.copy(alpha = 0.15f) else DungeonCard
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (rtdbConfig.isConnected) PixelEmerald else DungeonBorder
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = if (rtdbConfig.isConnected) Icons.Default.CheckCircle else Icons.Default.Cloud,
-                                        contentDescription = null,
-                                        tint = if (rtdbConfig.isConnected) PixelEmerald else RetroTextSecondary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = if (rtdbConfig.isConnected) "REALTIME DB CONNECTED" else "DATABASE STATUS",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = if (rtdbConfig.isConnected) PixelEmerald else RetroTextSecondary
-                                        )
-                                        Text(
-                                            text = rtdbStatusMsg,
-                                            fontSize = 11.sp,
-                                            color = RetroTextPrimary
-                                        )
-                                    }
-                                }
-                            }
-
-                            Text(
-                                text = "Firebase Realtime Database / REST API URL",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PixelCyan
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            OutlinedTextField(
-                                value = rtdbUrl,
-                                onValueChange = {
-                                    rtdbUrl = it
-                                    onUpdateRtdbConfig(it, rtdbToken, rtdbAutoSync)
-                                },
-                                placeholder = {
-                                    Text("https://your-app-rtdb.firebaseio.com", fontSize = 11.sp, color = RetroTextDisabled)
-                                },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().testTag("rtdb_url_input"),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PixelCyan,
-                                    unfocusedBorderColor = DungeonBorder,
-                                    focusedTextColor = RetroTextPrimary,
-                                    unfocusedTextColor = RetroTextPrimary
-                                )
-                            )
-
-                            // Quick Fill Demo / Example Button
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        val sampleUrl = "https://pixel-crypt-default-rtdb.firebaseio.com"
-                                        rtdbUrl = sampleUrl
-                                        onUpdateRtdbConfig(sampleUrl, rtdbToken, rtdbAutoSync)
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text("Use Sample Firebase URL", fontSize = 11.sp, color = PixelGold)
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Text(
-                                text = "Database Auth Secret / API Key (Optional)",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = RetroTextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            OutlinedTextField(
-                                value = rtdbToken,
-                                onValueChange = {
-                                    rtdbToken = it
-                                    onUpdateRtdbConfig(rtdbUrl, it, rtdbAutoSync)
-                                },
-                                placeholder = {
-                                    Text("auth token / secret key", fontSize = 11.sp, color = RetroTextDisabled)
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Key, contentDescription = null, tint = RetroTextSecondary, modifier = Modifier.size(16.dp))
-                                },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().testTag("rtdb_token_input"),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = PixelCyan,
-                                    unfocusedBorderColor = DungeonBorder,
-                                    focusedTextColor = RetroTextPrimary,
-                                    unfocusedTextColor = RetroTextPrimary
-                                )
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Auto Sync Toggle
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(DungeonCard)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Auto-Sync to Cloud",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = RetroTextPrimary
-                                    )
-                                    Text(
-                                        text = "Sync coins & stars on level victory",
-                                        fontSize = 10.sp,
-                                        color = RetroTextSecondary
-                                    )
-                                }
-                                Switch(
-                                    checked = rtdbAutoSync,
-                                    onCheckedChange = {
-                                        rtdbAutoSync = it
-                                        onUpdateRtdbConfig(rtdbUrl, rtdbToken, it)
-                                    },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = PixelCyan,
-                                        checkedTrackColor = PixelCyan.copy(alpha = 0.4f)
-                                    ),
-                                    modifier = Modifier.testTag("rtdb_autosync_switch")
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Action Buttons
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Test Connection Button
-                                OutlinedButton(
-                                    onClick = {
-                                        isTestingConnection = true
-                                        onTestRtdbConnection(rtdbUrl, rtdbToken) { success, msg ->
-                                            isTestingConnection = false
-                                            rtdbStatusMsg = msg
+                                        if (isSyncingNow) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Save Cloud", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
-                                    },
-                                    enabled = !isTestingConnection && !isRtdbBusy,
-                                    modifier = Modifier.weight(1f).height(44.dp).testTag("test_connection_button"),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, PixelCyan)
-                                ) {
-                                    if (isTestingConnection) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = PixelCyan, strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Default.Wifi, contentDescription = null, tint = PixelCyan, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Test Ping", fontSize = 11.sp, color = PixelCyan, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            isRestoringNow = true
+                                            onRestoreFromCloud { success, msg ->
+                                                isRestoringNow = false
+                                                cloudStatusNotice = if (success) "Progress restored from Firebase!" else msg
+                                            }
+                                        },
+                                        enabled = !isRestoringNow && !isRtdbBusy,
+                                        modifier = Modifier.weight(1f).height(40.dp).testTag("restore_from_cloud_button"),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, PixelGold)
+                                    ) {
+                                        if (isRestoringNow) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = PixelGold, strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.CloudDownload, contentDescription = null, tint = PixelGold, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Restore", color = PixelGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
 
-                                // Sync Now Button
+                                Spacer(modifier = Modifier.height(10.dp))
+
                                 Button(
                                     onClick = {
-                                        isSyncingNow = true
-                                        onSyncToCloud { success, msg ->
-                                            isSyncingNow = false
-                                            rtdbStatusMsg = msg
-                                        }
+                                        onLogout()
+                                        selectedTab = AuthTab.LOGIN
                                     },
-                                    enabled = !isSyncingNow && !isRtdbBusy,
-                                    modifier = Modifier.weight(1f).height(44.dp).testTag("sync_to_cloud_button"),
+                                    modifier = Modifier.fillMaxWidth().height(38.dp).testTag("logout_button"),
                                     shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = PixelEmerald)
+                                    colors = ButtonDefaults.buttonColors(containerColor = PixelRuby.copy(alpha = 0.85f))
                                 ) {
-                                    if (isSyncingNow) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Sync Up", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            // Restore Button
-                            OutlinedButton(
-                                onClick = {
-                                    isRestoringNow = true
-                                    onRestoreFromCloud { success, msg ->
-                                        isRestoringNow = false
-                                        rtdbStatusMsg = msg
-                                    }
-                                },
-                                enabled = !isRestoringNow && !isRtdbBusy,
-                                modifier = Modifier.fillMaxWidth().height(42.dp).testTag("restore_from_cloud_button"),
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, PixelGold)
-                            ) {
-                                if (isRestoringNow) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = PixelGold, strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = PixelGold, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Restore from Cloud Backup", fontSize = 11.sp, color = PixelGold, fontWeight = FontWeight.Bold)
+                                    Text("LOG OUT", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -882,20 +687,21 @@ private fun TabButton(
     title: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    testTag: String
+    testTag: String,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(6.dp))
             .background(if (isSelected) DungeonCard else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
             .testTag(testTag),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = title,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             fontFamily = FontFamily.Monospace,
             color = if (isSelected) PixelCyan else RetroTextSecondary

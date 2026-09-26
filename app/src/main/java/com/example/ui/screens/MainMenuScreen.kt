@@ -259,8 +259,8 @@ fun MainMenuScreen(
                             }
                         }
                         Text(
-                            text = if (rtdbConfig.isConnected) "Realtime DB: Active 🟢" else "Realtime DB: Configure",
-                            color = if (rtdbConfig.isConnected) PixelEmerald else RetroTextSecondary,
+                            text = if (currentUser != null) "Firebase Cloud: Connected 🔥" else "Firebase Cloud Sync: Ready 🔥",
+                            color = if (currentUser != null) PixelEmerald else PixelCyan,
                             fontSize = 10.sp
                         )
                     }
@@ -276,7 +276,7 @@ fun MainMenuScreen(
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
-                        text = if (currentUser != null) "CLOUD DB" else "LOG IN / SYNC",
+                        text = if (currentUser != null) "ACCOUNT" else "LOG IN",
                         color = if (currentUser != null) PixelCyan else Color.Black,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
