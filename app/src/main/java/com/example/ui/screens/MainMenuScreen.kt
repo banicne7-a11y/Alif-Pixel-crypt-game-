@@ -34,6 +34,9 @@ import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -62,6 +65,7 @@ import androidx.compose.ui.res.painterResource
 import com.example.ui.components.DailyRewardDialog
 import com.example.ui.components.LuckySpinDialog
 import com.example.ui.components.AchievementsDialog
+import com.example.ui.components.AuthAndDatabaseDialog
 import com.example.ui.components.PlayerStatsDialog
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -104,12 +108,17 @@ fun MainMenuScreen(
     val isFreeSpinAvailable by viewModel.isFreeSpinAvailable.collectAsStateWithLifecycle()
     val claimedAchievements by viewModel.claimedAchievementIds.collectAsStateWithLifecycle()
 
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val rtdbConfig by viewModel.rtdbConfig.collectAsStateWithLifecycle()
+    val isRtdbBusy by viewModel.isRtdbBusy.collectAsStateWithLifecycle()
+
     var showNameEditDialog by remember { mutableStateOf(false) }
     var editedNameText by remember { mutableStateOf(playerName) }
     var showDailyRewardDialog by remember { mutableStateOf(false) }
     var showLuckySpinDialog by remember { mutableStateOf(false) }
     var showAchievementsDialog by remember { mutableStateOf(false) }
     var showPlayerStatsDialog by remember { mutableStateOf(false) }
+    var showAuthAndDatabaseDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -195,7 +204,88 @@ fun MainMenuScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Cloud & Auth Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(DungeonSurface)
+                    .border(
+                        BorderStroke(1.dp, if (currentUser != null) PixelEmerald else PixelCyan.copy(alpha = 0.6f)),
+                        RoundedCornerShape(10.dp)
+                    )
+                    .clickable { showAuthAndDatabaseDialog = true }
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .testTag("cloud_auth_bar"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (currentUser != null) Icons.Default.AccountCircle else Icons.Default.CloudSync,
+                        contentDescription = "Cloud & Auth",
+                        tint = if (currentUser != null) PixelEmerald else PixelCyan,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (currentUser != null) currentUser!!.username else "Offline Guest",
+                                color = if (currentUser != null) PixelEmerald else RetroTextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (currentUser != null) PixelEmerald.copy(alpha = 0.2f) else DungeonCard)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = if (currentUser != null) "LOGGED IN" else "LOCAL",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (currentUser != null) PixelEmerald else RetroTextSecondary,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                        Text(
+                            text = if (rtdbConfig.isConnected) "Realtime DB: Active 🟢" else "Realtime DB: Configure",
+                            color = if (rtdbConfig.isConnected) PixelEmerald else RetroTextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = { showAuthAndDatabaseDialog = true },
+                    modifier = Modifier.height(32.dp).testTag("login_sync_button"),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (currentUser != null) DungeonCard else PixelCyan
+                    ),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = if (currentUser != null) "CLOUD DB" else "LOG IN / SYNC",
+                        color = if (currentUser != null) PixelCyan else Color.Black,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Header Hero Banner Card
             Card(
@@ -801,6 +891,37 @@ fun MainMenuScreen(
                     showNameEditDialog = true
                 },
                 onDismiss = { showPlayerStatsDialog = false }
+            )
+        }
+
+        // Login, Register, and Realtime Database Dialog
+        if (showAuthAndDatabaseDialog) {
+            AuthAndDatabaseDialog(
+                currentUser = currentUser,
+                rtdbConfig = rtdbConfig,
+                isRtdbBusy = isRtdbBusy,
+                onLogin = { emailOrUser, pass, onResult ->
+                    viewModel.login(emailOrUser, pass, onResult)
+                },
+                onRegister = { username, email, pass, onResult ->
+                    viewModel.register(username, email, pass, onResult)
+                },
+                onLogout = {
+                    viewModel.logout()
+                },
+                onUpdateRtdbConfig = { url, token, autoSync ->
+                    viewModel.updateRtdbConfig(url, token, autoSync)
+                },
+                onTestRtdbConnection = { url, token, onResult ->
+                    viewModel.testRtdbConnection(url, token, onResult)
+                },
+                onSyncToCloud = { onResult ->
+                    viewModel.syncNowToCloud(onResult)
+                },
+                onRestoreFromCloud = { onResult ->
+                    viewModel.restoreFromCloud(onResult)
+                },
+                onDismiss = { showAuthAndDatabaseDialog = false }
             )
         }
     }

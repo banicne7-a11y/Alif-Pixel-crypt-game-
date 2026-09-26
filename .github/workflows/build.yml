@@ -20,21 +20,41 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Build Debug APK & AAB
+      - name: Accept Android SDK Licenses
         run: |
-          chmod +x gradlew || true
-          gradle :app:assembleDebug :app:bundleDebug
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36" || true
+
+      - name: Prepare Android Keystore and Environment
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
+          fi
+          touch .env
+          chmod +x gradlew
+
+      - name: Build APK and AAB with Gradle Wrapper
+        run: |
+          ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon --stacktrace
 
       - name: Upload APK for Amazon Appstore / Testing
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: App-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
 
       - name: Upload AAB for Google Play Store / Amazon Appstore
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: App-Bundle-AAB

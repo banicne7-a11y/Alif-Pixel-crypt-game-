@@ -69,6 +69,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = GameRepository(db.levelProgressDao(), db.customLevelDao(), db.relicDao())
     val soundManager = RetroSoundManager()
 
+    val authManager = com.example.data.auth.AuthManager(application)
+    val rtdbManager = com.example.data.auth.RealtimeDatabaseManager(application)
+
+    val currentUser = authManager.currentUser
+    val authError = authManager.authError
+    val rtdbConfig = rtdbManager.config
+    val isRtdbBusy = rtdbManager.isBusy
+
     @Suppress("DEPRECATION")
     private val vibrator = application.getSystemService(Vibrator::class.java)
 
@@ -738,6 +746,128 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearMakerMessage() {
         _makerMessage.value = null
+    }
+
+    // ================= AUTH & REALTIME CLOUD DB =================
+    fun login(emailOrUser: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+        val success = authManager.login(emailOrUser, pass)
+        if (success) {
+            val user = authManager.currentUser.value
+            if (user != null) {
+                updatePlayerName(user.username)
+                triggerAutoSync()
+            }
+            onResult(true, null)
+        } else {
+            onResult(false, authManager.authError.value)
+        }
+    }
+
+    fun register(username: String, email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+        val success = authManager.register(username, email, pass, _selectedSkin.value.id)
+        if (success) {
+            val user = authManager.currentUser.value
+            if (user != null) {
+                updatePlayerName(user.username)
+                triggerAutoSync()
+            }
+            onResult(true, null)
+        } else {
+            onResult(false, authManager.authError.value)
+        }
+    }
+
+    fun logout() {
+        authManager.logout()
+    }
+
+    fun updateRtdbConfig(url: String, token: String, autoSync: Boolean) {
+        rtdbManager.updateConfig(url, token, autoSync)
+    }
+
+    fun testRtdbConnection(url: String, token: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val res = rtdbManager.testConnection(url, token)
+            onResult(res.first, res.second)
+        }
+    }
+
+    fun syncNowToCloud(onResult: (Boolean, String) -> Unit) {
+        val user = authManager.currentUser.value
+        val userId = user?.id ?: "local_guest"
+        val username = user?.username ?: _playerName.value
+        val email = user?.email ?: ""
+
+        val cloudData = com.example.data.auth.CloudPlayerData(
+            userId = userId,
+            username = username,
+            email = email,
+            goldCoins = _goldCoins.value,
+            freeHints = _freeHints.value,
+            selectedSkin = _selectedSkin.value.id,
+            unlockedSkins = _unlockedSkinIds.value.toList(),
+            selectedTheme = _selectedTheme.value.id,
+            unlockedThemes = _unlockedThemeIds.value.toList(),
+            dailyStreak = _dailyStreak.value,
+            totalStars = totalStarsCount.value ?: 0,
+            lastSyncedAt = System.currentTimeMillis()
+        )
+
+        viewModelScope.launch {
+            val res = rtdbManager.syncToCloud(cloudData)
+            onResult(res.first, res.second)
+        }
+    }
+
+    fun restoreFromCloud(onResult: (Boolean, String) -> Unit) {
+        val user = authManager.currentUser.value
+        val userId = user?.id ?: "local_guest"
+
+        viewModelScope.launch {
+            val (data, msg) = rtdbManager.restoreFromCloud(userId)
+            if (data != null) {
+                _goldCoins.value = data.goldCoins
+                prefs.edit().putInt("gold_coins", data.goldCoins).apply()
+
+                _freeHints.value = data.freeHints
+                prefs.edit().putInt("free_hints", data.freeHints).apply()
+
+                val skin = com.example.model.HeroSkin.entries.find { it.id == data.selectedSkin }
+                    ?: com.example.model.HeroSkin.SILVER_KNIGHT
+                _selectedSkin.value = skin
+                val newSkins = (_unlockedSkinIds.value + data.unlockedSkins).toSet()
+                _unlockedSkinIds.value = newSkins
+                prefs.edit()
+                    .putString("selected_skin", skin.id)
+                    .putStringSet("unlocked_skins", newSkins)
+                    .apply()
+
+                val theme = com.example.model.DungeonTheme.entries.find { it.id == data.selectedTheme }
+                    ?: com.example.model.DungeonTheme.DEFAULT_CRYPT
+                _selectedTheme.value = theme
+                val newThemes = (_unlockedThemeIds.value + data.unlockedThemes).toSet()
+                _unlockedThemeIds.value = newThemes
+                prefs.edit()
+                    .putString("selected_theme", theme.id)
+                    .putStringSet("unlocked_themes", newThemes)
+                    .apply()
+
+                _dailyStreak.value = data.dailyStreak
+                prefs.edit().putInt("daily_streak", data.dailyStreak).apply()
+
+                updatePlayerName(data.username)
+
+                onResult(true, msg)
+            } else {
+                onResult(false, msg)
+            }
+        }
+    }
+
+    fun triggerAutoSync() {
+        if (rtdbManager.config.value.autoSyncEnabled && rtdbManager.config.value.databaseUrl.isNotEmpty()) {
+            syncNowToCloud { _, _ -> }
+        }
     }
 
     @Suppress("DEPRECATION")
