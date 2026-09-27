@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build APK and Bundle
+    name: Build Signed Release APK and Bundle
     runs-on: ubuntu-latest
 
     steps:
@@ -30,34 +30,59 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-36" || true
 
-      - name: Prepare Android Keystore and Environment
+      - name: Prepare Android Keystores and Environment
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'alifpixelcrypt2026' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'alifpixelcrypt2026' }}
         run: |
+          # 1. Prepare Debug Keystore
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
           fi
           if [ ! -f debug.keystore ]; then
             keytool -genkeypair -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
+
+          # 2. Prepare Production Release Keystore (Required by Amazon & Google Play)
+          if [ -f my-upload-key.jks.base64 ]; then
+            base64 -d my-upload-key.jks.base64 > my-upload-key.jks
+          fi
+          if [ ! -f my-upload-key.jks ]; then
+            keytool -genkeypair -v -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" -alias upload -keypass "$KEY_PASSWORD" -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Alif Pixel Crypt, OU=Mobile, O=Alif Studio, L=Dhaka, ST=Dhaka, C=BD"
+            base64 my-upload-key.jks > my-upload-key.jks.base64
+          fi
+
+          # 3. Prepare Environment
           if [ -f .env.example ] && [ ! -f .env ]; then
             cp .env.example .env
           fi
           touch .env
           chmod +x gradlew
 
-      - name: Build APK and AAB with Gradle Wrapper
+      - name: Build Release and Debug APKs & Bundles
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'alifpixelcrypt2026' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'alifpixelcrypt2026' }}
         run: |
-          ./gradlew :app:assembleDebug :app:bundleDebug --no-daemon --stacktrace
+          ./gradlew :app:assembleRelease :app:bundleRelease :app:assembleDebug :app:bundleDebug --no-daemon --stacktrace
 
-      - name: Upload APK for Amazon Appstore / Testing
+      - name: Upload Release APK (For Amazon Appstore)
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: App-Debug-APK
+          name: Alif-Pixel-Crypt-RELEASE-APK (For Amazon Appstore)
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Upload Release AAB (For Google Play / Amazon Appstore)
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alif-Pixel-Crypt-RELEASE-AAB (For Google Play)
+          path: app/build/outputs/bundle/release/*.aab
+
+      - name: Upload Debug APK (For Local Device Testing Only)
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Alif-Pixel-Crypt-Debug-APK (For Testing Only)
           path: app/build/outputs/apk/debug/*.apk
-
-      - name: Upload AAB for Google Play Store / Amazon Appstore
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: App-Bundle-AAB
-          path: app/build/outputs/bundle/debug/*.aab
